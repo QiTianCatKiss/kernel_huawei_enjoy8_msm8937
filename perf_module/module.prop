@@ -1,6 +1,6 @@
 id=ldnal20-perf
 name=LDN-AL20 内核性能调优
-version=v3.0
-versionCode=3
+version=v3.1
+versionCode=4
 author=QiTianCatKiss
-description=运行时性能调参：I/O 调度器 deadline、swappiness、脏页回写、readahead、interactive 调频。需配合 V8 内核（开启 SELINUX_DEVELOP 后才允许临时关闭 SELinux 写入 /proc、/sys）。
+description=运行时性能调参：I/O 调度器 deadline、swappiness、脏页回写、readahead、interactive 调频。同时兼容 Magisk 与 KernelSU(ReSukiSU) 模块目录格式，放在 /data/adb/modules/ 即可被两者执行。需配合 V8+ 内核（开启 SELINUX_DEVELOP 后才允许临时关闭 SELinux 写入 /proc、/sys）。
