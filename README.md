@@ -1,14 +1,51 @@
-# LDN-AL20 内核（3.18.66-ByQiTianCatKiss）
+# LDN-AL20 内核（3.18.66-ByQiTianCatKiss）— debug 分支
 
 华为畅享 8（LDN-AL20）的定制内核源码、构建脚本与 WiFi 启动模块。
+
+> **你当前在 `debug` 分支**（V12-debug 调试内核）。
+> 日常使用请切到`main` 分支（V11），本分支有`-pg` 插桩与
+> softlockup 计时器开销，仅用于排障。
 
 - **设备**：Huawei Enjoy 8 / LDN-AL20（骁龙 430 MSM8937，arm64）
 - **内核**：Linux 3.18.66（上游华为分支 `LA.UM.6.5.r1-03000-8x96.0`）
 - **版本名**：`3.18.66-ByQiTianCatKiss`
-- **状态**：WiFi 已在真机实测可用（详见「WiFi 功能修复」）；ReSukiSU root 已集成
+- **状态**：WiFi 修复与 ReSukiSU root 已集成；**V12-debug 尚受prima 编译阻断**
 
 > 机型关系：LDN-AL20 是 LDN-AL00 的高配版（同为 London 代号，HL1LDNM / RHL4LDNM），
 > 内核完全共用，仅设备树 ID 不同。
+
+---
+
+## ⚠ 先读这一节：debug 版当前无法出镜像
+
+**2026-10-03 实测**：prima WLAN 驱动仍有 3 个编译错误，
+V12-debug 暂时**无法产出可刷镜像**。
+
+已解决的部分（15 个错误）：
+`FEATURE_WLAN_TDLS` 在树中无任何 `#define`，而 prima 大量代码假定它已定义。
+`tools/prima_tdls_fix.sh` 补上后，15 个 `CFG_TDLS_*` 宏未声明错误全部消除。
+
+剩余 3 个错误（`drivers/staging/prima` 侧）：
+```
+wlan_hdd_tdls.h:295  unknown type name 'tCsrTdlsLinkEstablishParams'
+wlan_hdd_main.h:1738'HDD_MAX_NUM_TDLS_STA' undeclared here
+```
+根因是 include 路径顺序错乱——`drivers/staging/prima` 是**死目录**
+（`drivers/staging/Makefile` 里无 prima 条目，编译产出0 个 .o），
+但它的头因 `-I` 路径顺序排在前面，挡住了 `drivers/prima` 自己的头。
+
+**待决策**：是否删除 `drivers/staging/prima/`，或将其从 include 路径排除。
+需先确认无其他驱动引用其中部分头文件。
+
+### 不需重编译的替代方案
+
+若只是要查内核级问题，用`modules/ldn20-sysrq/`（两分支都有）：
+
+```sh
+sh /data/adb/ldn20-sysrq/sysrq_on.sh       # 开启
+echo w > /proc/sysrq-trigger               # 阻塞任务栈（免root）
+cat /data/local/tmp/sysrq_status.txt# 自检结果
+```
 
 ---
 
@@ -19,7 +56,7 @@
 
 | 分支 | 内核 | 构建脚本 | 用途 |
 |---|---|---|---|
-| **`main`** | V11 | `tools/mkv11.sh` | 日常使用。性能优化，无持续运行时开销 |
+| `main` | V11 | `tools/mkv11.sh` | 日常使用。性能优化，无持续运行时开销 |
 | **`debug`** | V12-debug | `tools/mkv12dbg.sh` | 排障。开启 kprobes / ftrace / hung-task / debug-info |
 
 ```sh
