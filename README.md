@@ -438,10 +438,65 @@ drivers/prima/CORE/HDD/src/wlan_hdd_main.c:12216: error:
 > 但只要重新完整编译就会卡在 prima；`ldn-build-v10` 里的 Image/vmlinux
 > 是补丁**之前**的产物，之后的改动都没能通过一次干净重编。
 
-**处理方向（需先确认一件事）**：仓库里的 `drivers/prima` 是从哪个渠道获取的？
-若原厂有完整包（含注入 `FEATURE_WLAN_TDLS` 的私有头，或一份能编过的
-`wlan_hdd_cfg.c`/`wlan_hdd_main.c`），换用它即可恢复。
-在此之前，V12-debug 无法产出可刷镜像，sysrq 方案（不需重编译）是唯一可用路径。
+**处理方向**：先补上缺失的 `FEATURE_WLAN_TDLS` 定义（见下），
+若仍有残余错误，则需要一份原厂完整的 prima 源码。
+
+#### 已验证有效的部分修复
+
+`FEATURE_WLAN_TDLS` 在全树无任何 `#define`，而 prima 里
+`wlan_hdd_tdls.h:37` 起整份内容、`wlan_hdd_main.h:1735-1743` 的
+`scan_ctxt`、`wlan_hdd_cfg.h:2119`/`:3661-3662` 的 TDLS 宏与成员
+都被 `#ifdef FEATURE_WLAN_TDLS` 包住 —— 即**树是按「TDLS 应被定义」
+写的，只缺定义**。
+
+`tools/prima_tdls_fix.sh` 在 `wlan_hdd_includes.h` 的 include guard
+之前补上定义（该头被 23 个文件 include，且自身不含任何 `FEATURE_*`
+定义，是最上游的公共头）。幂等，MARK `LDN-AL20-ENABLE-TDLS`。
+
+**实测效果**：15 个 `CFG_TDLS_*` / `CFG_ENABLE_*_BMISS` 宏未声明错误
+**全部消失**，`drivers/prima` 侧编译通过。
+
+> 注意 `drivers/prima` 与 `drivers/staging/prima` 是两个独立副本
+> （inode 不同，非符号链接），补丁必须各打一次，脚本已处理。
+
+#### 残余问题：staging 副本的头被优先命中
+
+编译仍剩 3 个错误，全部来自 `drivers/staging/prima`：
+
+```
+drivers/staging/prima/CORE/HDD/inc/wlan_hdd_tdls.h:295:
+    unknown type name 'tCsrTdlsLinkEstablishParams'
+drivers/staging/prima/CORE/HDD/inc/wlan_hdd_main.h:1738:
+    'HDD_MAX_NUM_TDLS_STA' undeclared here (not in a function)
+```
+
+起因是**include 路径顺序错乱**：`drivers/prima/CORE/HDD/src/wlan_hdd_ftm.c:70`
+写的是 `#include "wlan_hdd_main.h"`，该头不在 `src/` 下（实际在 `inc/`），
+于是回退到 `-I` 路径，**先命中了 `drivers/staging/prima` 的副本**。
+于是 `drivers/prima` 的源文件混用了 staging 的头。
+
+而 `drivers/staging/Makefile` 里**没有 prima 条目**，
+`ldn-build-tdls/drivers/staging/prima` 下 **0 个 .o** ——
+说明 `drivers/staging/prima` 是**死目录**，只是它的头挡了道。
+
+> 结论：`drivers/staging/prima/` 应当整体删除（或至少从 include 路径中
+> 排除）。当前未这么做，需谨慎评估 —— 不排除它可能还有其他驱动
+> 在引用其中部分头文件。
+
+### 附带发现：prima 的构建开关是 `CONFIG_PRONTO_WLAN`
+
+`drivers/Makefile:185` 是 `obj-$(CONFIG_PRONTO_WLAN) += prima/`，
+而 `drivers/prima/Kconfig:22` 里 `PRIMA_WLAN_LFR/OKC/11AC_HIGH_TP`
+却挂在 `if PRIMA_WLAN != n || PRONTO_WLAN != n` 块内。
+
+本机 config 里 `PRIMA_WLAN=n` 而 `PRONTO_WLAN=y` ——
+所以**开 `PRIMA_WLAN_*` 那批子项是无效操作**（父项是 n）。
+`drivers/prima/Makefile` 虽写成 out-of-tree 风格
+（`$(MAKE) -C $(KERNEL_SOURCE) ... M=$(CURDIR) modules`），
+但被 `obj-$(CONFIG_PRONTO_WLAN)` 内建，`wlan.o`（7.2MB）直接链进 vmlinux。
+
+**推论**：验证 prima 改动不能只 `make drivers/prima/xxx.o`（会报
+`No rule to make target`），必须走完整编译。
 
 ---
 
