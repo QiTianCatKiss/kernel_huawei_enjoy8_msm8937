@@ -61,3 +61,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 ~$*
+# ---- 仅 debug 分支存在的工具（main 分支工作区保留，切分支时自动消失）----
+# 若在 main 分支看到这些文件属正常：git rm --cached 只动索引不动磁盘
