@@ -33,10 +33,10 @@ setval() {
   fi
 }
 
-step "1/9 KSU 钉版"
+step "1/10 KSU 钉版"
 bash "$TOOLS/ksu_pin.sh" "$KSRC"
 
-step "2/9 WiFi 内核侧自启动修复"
+step "2/10 WiFi 内核侧自启动修复"
 S="$KSRC/fs/overlayfs/super.c"
 if grep -q 'prctl(PR_SET_MM, PR_SET_MM_MAP, 0)' "$S" 2>/dev/null; then
     echo "PRETS 补丁存在，跳过"
@@ -46,14 +46,21 @@ fi
 python3 "$TOOLS/wifi_proc_patch.py" "$KSRC"
 echo "WiFi 触发点: $(grep -c 'LDN-AL20-BUILTIN-WIFI-TRIGGER' "$KSRC/drivers/prima/CORE/HDD/src/wlan_hdd_main.c")"
 
-step "3/9 KSU execve 钩子"
+step "3/10 KSU execve 钩子"
 python3 "$TOOLS/ksu_exec_hook_fix.py" "$KSRC"
 echo "execve 钩子标记: $(grep -c 'KSU_EXEC_HOOK_V2' "$KSRC/fs/exec.c")"
 
-step "4/9 Kconfig 补丁（arm64 select HAVE_REGS_AND_STACK_ACCESS_API）"
+step "4/10 prima TDLS 宏补丁（补 FEATURE_WLAN_TDLS，两版构建都必需）"
+bash "$TOOLS/prima_tdls_fix.sh" "$KSRC"
+if ! grep -q "LDN-AL20-ENABLE-TDLS" "$KSRC/drivers/prima/CORE/HDD/inc/wlan_hdd_includes.h"; then
+    echo ">>> prima TDLS 补丁未生效，终止"
+    exit 1
+fi
+
+step "5/10 Kconfig 补丁（arm64 select HAVE_REGS_AND_STACK_ACCESS_API）"
 bash "$TOOLS/v12dbg_kconfig_patch.sh" "$KSRC"
 
-step "5/9 准备 config 基线"
+step "6/10 准备 config 基线"
 mkdir -p "$OUT"
 if [ -f "$HOME/ldn-build-v10/.config" ]; then
     cp "$HOME/ldn-build-v10/.config" "$OUT/.config"
@@ -63,7 +70,7 @@ else
     echo "基线取自 msm8937_defconfig"
 fi
 
-step "6/9 沿用 V11 的 WiFi / 安全 / ReSukiSU 配置"
+step "7/10 沿用 V11 的 WiFi / 安全 / ReSukiSU 配置"
 for k in PRIMA_WLAN_LFR PRIMA_WLAN_OKC PRIMA_WLAN_11AC_HIGH_TP NL80211_TESTMODE \
          IOSCHED_DEADLINE IOSCHED_NOOP DEFAULT_DEADLINE \
          TCP_CONG_ADVANCED TCP_CONG_WESTWOOD DEFAULT_WESTWOOD \
@@ -77,7 +84,7 @@ disable MODULE_SIG
 disable MODULE_SIG_ALL
 disable MODULE_SIG_FORCE
 
-step "7/9 === V12 核心：重开全部调试能力 ==="
+step "8/10 === V12 核心：重开全部调试能力 ==="
 # --- 总闸门（KPROBES/KRETPROBES 的硬依赖）---
 enable HUAWEI_KERNEL_DEBUG
 # --- kprobes 体系 ---
@@ -139,7 +146,7 @@ disable SCHED_STACK_END_CHECK
 disable UPROBES
 disable BPF_SYSCALL
 
-step "8/9 olddefconfig + 断言"
+step "9/10 olddefconfig + 断言"
 cd "$KSRC" || exit 1
 make O="$OUT" olddefconfig >/dev/null 2>&1
 
@@ -170,7 +177,7 @@ done
 echo "断言失败数: $ASSERT_FAIL"
 [ "$ASSERT_FAIL" -ne 0 ] && { echo ">>> 配置断言未通过，终止编译"; exit 1; }
 
-step "9/9 编译 + objdump 断言"
+step "10/10 编译 + objdump 断言"
 export KBUILD_BUILD_USER=android KBUILD_BUILD_HOST=localhost
 export KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP="$(date '+%a %b %d %H:%M:%S %Z %Y')"
