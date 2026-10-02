@@ -63,13 +63,23 @@ else
 fi
 
 # --- apply built-in WLAN stock-trigger emulation (idempotent) ---
-echo "=== [1/6] 应用 WiFi 内核侧触发补丁 ==="
+echo "=== [1/7] 应用 WiFi 内核侧触发补丁 ==="
 python3 "$TOOLS/wifi_proc_patch.py" "$KSRC"
 grep -c "LDN-AL20-BUILTIN-WIFI-TRIGGER" "$KSRC/drivers/prima/CORE/HDD/src/wlan_hdd_main.c" \
   || { echo "!!!! WiFi 补丁未生效，停止构建 !!!!"; exit 1; }
 
+# --- define missing FEATURE_WLAN_TDLS (idempotent) ---
+# 该宏在树中无任何 #define，而 prima 大量代码假定它已定义：
+#   wlan_hdd_tdls.h:37 起整份内容、wlan_hdd_main.h:1735-1743 的 scan_ctxt、
+#   wlan_hdd_cfg.h:2119 与 :3661-3662 的 TDLS 宏均被 #ifdef 包住
+# 不补则编译报 15 个 CFG_TDLS_* / CFG_ENABLE_*_BMISS 宏未声明错误。
+echo "=== [2/7] 补 prima TDLS 宏定义 ==="
+bash "$TOOLS/prima_tdls_fix.sh" "$KSRC"
+grep -q "LDN-AL20-ENABLE-TDLS" "$KSRC/drivers/prima/CORE/HDD/inc/wlan_hdd_includes.h" \
+  || { echo "!!!! prima TDLS 补丁未生效，停止构建 !!!!"; exit 1; }
+
 # --- fix KSU execve hook wiring (idempotent) ---
-echo "=== [2/6] 应用 KSU execve 钩子修复 ==="
+echo "=== [3/7] 应用 KSU execve 钩子修复 ==="
 python3 "$TOOLS/ksu_exec_hook_fix.py" "$KSRC"
 grep -c "KSU_EXEC_HOOK_V2" "$KSRC/fs/exec.c" \
   || { echo "!!!! execve 钩子补丁未生效，停止构建 !!!!"; exit 1; }
@@ -107,7 +117,7 @@ enable() {
   fi
 }
 
-echo "=== [3/6] 应用性能优化配置 ==="
+echo "=== [4/7] 应用性能优化配置 ==="
 
 # --- 1. I/O 调度器：cfq -> deadline ---
 enable IOSCHED_DEADLINE
@@ -213,11 +223,11 @@ if [ "$fail" -ne 0 ]; then
 fi
 echo "== 全部通过 =="
 
-echo "=== [4/6] 编译 Image.gz ==="
+echo "=== [5/7] 编译 Image.gz ==="
 make O="$OUT" -j20 CONFIG_QCOM_TDLS=y CONFIG_MDNS_OFFLOAD_SUPPORT=y \
      CONFIG_PRIMA_WLAN_LFR_MBB=y CONFIG_NO_ERROR_ON_MISMATCH=y Image.gz 2>&1 | tail -30
 
-echo "=== [5/6] 对象级验证：fs/exec.o 必须有 3 个 KSU 重定位 ==="
+echo "=== [6/7] 对象级验证：fs/exec.o 必须有 3 个 KSU 重定位 ==="
 OBJDUMP=$HOME/aarch64-linux-android-4.9/bin/aarch64-linux-android-objdump
 if [ -x "$OBJDUMP" ]; then
   "$OBJDUMP" -dr "$OUT/fs/exec.o" 2>/dev/null \
@@ -235,7 +245,7 @@ else
   echo "  [跳过] 找不到 $OBJDUMP"
 fi
 
-echo "=== [6/6] 结果 ==="
+echo "=== [7/7] 结果 ==="
 ls -la "$OUT/arch/arm64/boot/Image.gz"
 echo "--- utsrelease ---"
 cat "$OUT/include/generated/utsrelease.h"
