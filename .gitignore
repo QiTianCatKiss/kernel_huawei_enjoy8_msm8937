@@ -1,0 +1,59 @@
+# ---- 编译产物（不提交）----
+out/
+*.img
+*.img.gz
+*.o
+*.ko
+*.a
+*.dtb
+*.dtbo
+*.cpio
+*.bin
+Image
+Image.gz
+*.map
+*.sym
+*.order
+*.cmd
+*.d
+.*.cmd
+.tmp_versions/
+modules.order
+modules.builtin
+Module.symvers
+include/generated/
+include/config/
+include/autoconf.h
+include/linux/utsrelease.h
+.arch.info
+.*.cmd
+
+# stock/ 下的原厂二进制（体积大且属华为原厂产物）
+stock/Image
+stock/ldn-al20.dtb
+
+# ramdisk 解包产物
+ramdisk/
+
+# extracted/ 中间产物
+extracted/
+
+# 日志与抓包
+*.log
+*.txt
+!README.md
+!kernel-source/**
+dmesg*
+logcat*
+pstore.tx
+
+# Magisk 安装包
+wifi_module.zip
+
+# 编辑器/系统
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+~$*
