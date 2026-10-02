@@ -12,6 +12,33 @@
 
 ---
 
+## 分支说明
+
+本仓库分两个分支，**共享同一份内核源码**（内核补丁两版都需要，
+分叉会导致每次改补丁要做两遍），差异在构建脚本与内核配置：
+
+| 分支 | 内核 | 构建脚本 | 用途 |
+|---|---|---|---|
+| **`main`** | V11 | `tools/mkv11.sh` | 日常使用。性能优化，无持续运行时开销 |
+| **`debug`** | V12-debug | `tools/mkv12dbg.sh` | 排障。开启 kprobes / ftrace / hung-task / debug-info |
+
+```sh
+git checkout main    # 切到普通版
+git checkout debug   # 切到调试版
+```
+
+两版的内核配置快照在 `configs/`（`v11.config` / `v12dbg.config`），
+详见 `configs/README.md`。
+
+> `debug` 分支的 `-pg` 插桩与 softlockup 计时器有可感知开销，
+> **仅在排障时刷入**，问题定位后请切回 `main` 重编。
+
+**不需要重编译就能用的调试能力**：`modules/ldn20-sysrq/`
+（sysrq 调试入口，两分支都带），装上即可用 `echo w > /proc/sysrq-trigger`
+查阻塞任务栈，免 root。
+
+---
+
 ## 目录结构
 
 ```
@@ -20,21 +47,29 @@
 │   ├── drivers/prima/      高通 prima WiFi 驱动（built-in 编译进 Image）
 │   ├── drivers/staging/prima/  同上（prima 的 staging 副本，保持同步）
 │   └── fs/overlayfs/       华为私有 overlayfs 补丁
+├── configs/                内核配置快照（可复现构建）
+│   ├── v11.config          普通版实际配置（main 分支）
+│   └── v12dbg.config       调试版实际配置（debug 分支）
 ├── tools/                  构建与打包脚本
 │   ├── build.sh            一键编译（WSL）
 │   ├── mkv11.sh            V11 构建脚本（当前推荐，KSU 钉版 + 全部修复）
+│   ├── mkv12dbg.sh         V12-debug 构建脚本（仅 debug 分支）
 │   ├── pack_kernel.py      按原厂格式重打包 kernel.img
 │   ├── wifi_proc_patch.py  补回 /proc/wifi_built_in 私有节点
 │   ├── ksu_pin.sh          把 ReSukiSU 钉到 v4.2.0-rc3
-│   └── ksu_exec_hook_fix.py 修复 execve 钩子接线（su 可用的关键）
+│   ├── ksu_exec_hook_fix.py 修复 execve 钩子接线（su 可用的关键）
+│   ├── prima_tdls_fix.sh   补 FEATURE_WLAN_TDLS 定义（prima 编译必需）
+│   ├── v12dbg_kconfig_patch.sh  补 arm64 regs/stack access API select
+│   └── pack_modules.sh     打包 slim / sysrq 模块为可安装 zip
 ├── wifi_module/            Magisk 模块（开机自动启动 WiFi，兼容旧内核）
 ├── perf_module/            性能调优模块（已并入 slim-mem，保留仅兼容）
-├── modules/                系统底层精简模块集（5 个包）
+├── modules/                系统底层精简模块集（6 个包）
 │   ├── ldn20-slim-core/    引导包（携带公共库，必须先装）
 │   ├── ldn20-slim-mem/     内存与回收（含 direct_swappiness、华为 LMKD）
 │   ├── ldn20-slim-net/     网络栈（TIME_WAIT、FastOpen、keepalive）
 │   ├── ldn20-slim-boot/    开机与后台服务（init 服务停止 + 预装冻结）
 │   ├── ldn20-slim-debug/   日志与上报（logd 降噪、atrace）
+│   ├── ldn20-sysrq/        sysrq 调试入口（免 root 内核诊断）
 │   └── common/             公共库唯一源（打包时分发到各包）
 ├── stock/                  原厂内核镜像、LDN-AL20 设备树、原厂 config
 ├── ramdisk/                解开的原厂 ramdisk
