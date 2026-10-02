@@ -1,0 +1,6 @@
+id=ldn20-sysrq
+name=LDN-AL20 sysrq 调试入口
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=开启内核 Magic SysRq，提供免 root 的内核级诊断能力（阻塞任务栈、CPU 寄存器、内存、调度器、软中断统计）。基于本机内核已编译的 CONFIG_MAGIC_SYSRQ，无需重编译内核，V10/V11 均可直接使用。安装后默认只开启能力不做触发，需手动执行诊断命令。开机自检结果见 /data/local/tmp/sysrq_status.txt。

@@ -36,7 +36,7 @@ import zipfile
 
 mods_dir, out_dir = sys.argv[1], sys.argv[2]
 MODS = ['ldn20-slim-core', 'ldn20-slim-mem', 'ldn20-slim-net',
-        'ldn20-slim-boot', 'ldn20-slim-debug']
+        'ldn20-slim-boot', 'ldn20-slim-debug', 'ldn20-sysrq']
 
 for m in MODS:
     src = os.path.join(mods_dir, m)
@@ -82,5 +82,9 @@ echo "  3. ldn20-slim-net     （网络栈）"
 echo "  4. ldn20-slim-boot    （开机与后台服务）"
 echo "  5. ldn20-slim-debug   （日志与上报）"
 echo
+echo "  -- 以下独立于 slim 系列，随时可装/卸 --"
+echo "  6. ldn20-sysrq        （sysrq 调试入口，V10/V11 即可用）"
+echo
 echo "装完重启，然后： su -c 'sh /data/adb/ldn20-slim/slim_status.sh'"
+echo "sysrq 状态：      cat /data/local/tmp/sysrq_status.txt"
 echo "产物目录: $OUT_DIR"

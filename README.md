@@ -288,6 +288,163 @@ swappiness、脏页回写、readahead、interactive 调频。
 
 ---
 
+## 调试内核（V12-debug，`tools/mkv12dbg.sh`）
+
+### 为什么 V11「没有调试接口」
+
+V11 的 `mkv11.sh` **主动关闭**了全部调试能力（第 122–135 行）：
+
+```
+EVENT_TRACING / SCHED_TRACER / CONTEXT_SWITCH_TRACER
+FUNCTION_TRACER / TRACING / FTRACE
+LOCKUP_DETECTOR / SOFTLOCKUP_DETECTOR / HARDLOCKUP_DETECTOR
+DETECT_HUNG_TASK / DEBUG_INFO
+```
+
+不是这棵树不支持，而是性能优化时为了省掉 softlockup 计时器与
+`-pg` 插桩开销把它们关了。V12-debug 在此基础上逐项重开。
+
+### 先免费的部分：sysrq 当前内核就能用（V11 也生效）
+
+**不需要重编译。** 已验证链路：
+
+| 环节 | 位置 | 状态 |
+|---|---|---|
+| `CONFIG_MAGIC_SYSRQ=y` | `ldn-build-v10/.config` | 已开 |
+| `drivers/tty/sysrq.o` | 已编译进内核 | 在 |
+| `/proc/sysrq-trigger` | `drivers/tty/sysrq.c:1140` | 已注册（S_IWUSR） |
+| `kernel.sysrq` sysctl | `kernel/sysctl.c:1041` | 已注册（0644） |
+| `sysrq_enabled` 初值 | `CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE` | **0x0（关闭）** |
+
+开启方式三种任选：
+
+```sh
+echo 1 > /proc/sys/kernel/sysrq      # 运行时立即生效（推荐）
+# 或内核命令行加 sysrq_always_enabled=1（__setup 参数，非 CONFIG）
+# 或 V12-debug 编译时把 MAGIC_SYSRQ_DEFAULT_ENABLE 设为 0x1
+```
+
+关闭后的默认触发方式（**免 root**，因为 `/proc/sysrq-trigger` 只需 S_IWUSR）：
+
+```sh
+echo w > /proc/sysrq-trigger    # 打印所有 D 状态阻塞任务的栈
+echo l > /proc/sysrq-trigger    # 各 CPU 寄存器 + 反汇编
+```
+
+`write_sysrq_trigger()` 调的是 `__handle_sysrq(c, false)`，
+`check_mask=false` 会**绕过掩码检查直接执行**。
+
+封装好的脚本：`tools/sysrq_on.sh`
+
+```sh
+sh sysrq_on.sh            # 开启
+sh sysrq_on.sh status     # 查看状态
+sh sysrq_on.sh cmd w      # 触发动作
+```
+
+> 若 `echo 1 > /proc/sys/kernel/sysrq` 被 SELinux 拦（实测本机 Enforcing），
+> 需 `su -c`；触发动作本身不需要 root。
+
+### V12-debug 打开的 CONFIG
+
+总闸门是华为自定义的 `HUAWEI_KERNEL_DEBUG`（`arch/arm64/Kconfig:1121`）。
+它被构建系统强制关闭（`AndroidKernel.mk:89`
+`KERNEL_CONFIG_OVERRIDE += CONFIG_HUAWEI_KERNEL_DEBUG=n`），而
+`KPROBES`（`arch/Kconfig:37`）与 `KRETPROBES`（`arch/Kconfig:159`）
+都 `depends on` 它 —— 这是之前 kprobes 不可用的根因。
+
+| 组 | 选项 |
+|---|---|
+| 总闸门 | `HUAWEI_KERNEL_DEBUG` |
+| kprobes | `KPROBES` `KRETPROBES` `KPROBE_EVENT` |
+| ftrace | `FTRACE` `FUNCTION_TRACER` `FUNCTION_GRAPH_TRACER` `DYNAMIC_FTRACE` `FTRACE_SYSCALLS` `STACKTRACER` `SCHED_TRACER` |
+| 卡死检测 | `DETECT_HUNG_TASK` `LOCKUP_DETECTOR` `SOFTLOCKUP_DETECTOR` `HARDLOCKUP_DETECTOR` `PANIC_ON_OOPS` |
+| 其他 | `DEBUG_INFO` `SCHEDSTATS` `MAGIC_SYSRQ` |
+
+同时**保持关闭**高开销项，避免调试能力反噬日常性能：
+`DEBUG_VMALLOC` / `DEBUG_PAGEALLOC` / `DEBUG_MUTEXES` / `DEBUG_SPINLOCK` /
+`FAULT_INJECTION` / `FREE_PAGES_RDONLY` / `DEVMEM` / `MSM_RTB` /
+`IPC_LOGGING` / `SCHED_STACK_END_CHECK`。
+
+### 必须打的 Kconfig 补丁
+
+`HAVE_REGS_AND_STACK_ACCESS_API` 在 `arch/Kconfig:226` 定义，
+但**全树没有任何架构 select 它**（`arch/arm`/`x86`/`s390`/`powerpc` 都没），
+导致 `KPROBE_EVENT` 的依赖永远不满足。
+
+arm64 实际完全支持这套 API（`regs_get_kernel_argument` 等），
+`tools/v12dbg_kconfig_patch.sh` 在 `select HAVE_KPROBES` 后补一行：
+
+```
+select HAVE_REGS_AND_STACK_ACCESS_API
+```
+
+幂等（MARK `LDN-AL20-REGS_STACK-API`），可在 `mkv12dbg.sh` 中重复执行。
+
+> 教训：Kconfig 的 `select` 语句**不支持行内 `/* */` 注释**，
+> 会报 `syntax error`。MARK 必须独占一行，以 `#` 开头。
+
+### 本机确认不可用（不必再试）
+
+| 项 | 原因 |
+|---|---|
+| `UPROBE_EVENT` | `ARCH_SUPPORTS_UPROBES` 只在 `arch/arm`/`x86`/`s390`/`powerpc` 定义，**arm64 没有** |
+| `KPROBE_EVENTS` / `FPROBE_EVENTS` | 这是 4.0 才 backport 的动态事件框架，3.18 树里不存在。只有单数版 `KPROBE_EVENT` |
+| `BPF_SYSCALL` | 3.18 无 eBPF，上游 4.1 才引入 |
+| 串口控制台 | 树内无任何 UART 驱动（只有 `TTY`/`SERIAL_CORE`/`SERIAL_EARLYCON`） |
+| `PSTORE` | 未启用，且无后端设备 |
+
+> `KPROBE_EVENT`（单数）是 3.18 的老式动态事件，
+> 通过 tracefs 注册，与 4.x 的 `KPROBE_EVENTS` 不是一回事。
+
+### 编译与使用
+
+```sh
+bash tools/mkv12dbg.sh        # 完整流程，含 config 断言 + objdump 断言
+```
+
+脚本会验证 `vmlinux` 里 `register_kprobe` / `__stack_trace` 等符号存在，
+并输出 `System.map-v12dbg`、`vmlinux-v12dbg`、`config-v12dbg` 供后续分析。
+
+> V12-debug 开了 `-pg` 插桩与 softlockup 计时器，日常使用会有可感知开销，
+> 建议仅在排障时刷入，问题定位后回退 V11。
+
+### ⚠ 阻断：prima WLAN 驱动当前无法编译（与本改动无关）
+
+2026-10-03 实测：用 `ldn-build-v10` **自己的原始 config** 重新编译，同样失败：
+
+```
+drivers/prima/CORE/HDD/src/wlan_hdd_cfg.c:2662: error:
+    'CFG_ENABLE_CONSECUTIVE_BMISS_NAME' undeclared here (not in a function)
+    （同批共 15 个 TDLS/BMISS 宏未声明）
+drivers/prima/CORE/HDD/src/wlan_hdd_cfg.c:4462: error:
+    'hdd_config_t' has no member named 'fEnableTDLSScan'
+drivers/prima/CORE/HDD/src/wlan_hdd_main.c:12216: error:
+    'hdd_context_t' has no member named 'scan_ctxt'
+```
+
+根因是**源码自身 TDLS 宏不一致**：
+
+- `wlan_hdd_main.h:1735-1743`：`scan_ctxt` / `tdls_mode` / `tdlsConnInfo` 定义在
+  `#ifdef FEATURE_WLAN_TDLS` 内；
+- `wlan_hdd_main.c:12216`：却在 guard **之外**使用 `pHddCtx->scan_ctxt`；
+- `wlan_hdd_cfg.h:2119` 的 TDLS/BMISS 宏块同样包在 `#ifdef FEATURE_WLAN_TDLS` 内，
+  而 `wlan_hdd_cfg.c:2662/3652` 的使用点在 guard 外。
+
+而 `FEATURE_WLAN_TDLS` 在整棵树里**没有任何 `#define`**（只有 `#ifdef` 使用点）。
+也就是说这批宏要么由未纳入本仓库的私有头注入，要么本树的 TDLS 支持本就是半成品。
+
+> 这解释了此前一系列现象：WiFi 内核侧自启动补丁已就位，
+> 但只要重新完整编译就会卡在 prima；`ldn-build-v10` 里的 Image/vmlinux
+> 是补丁**之前**的产物，之后的改动都没能通过一次干净重编。
+
+**处理方向（需先确认一件事）**：仓库里的 `drivers/prima` 是从哪个渠道获取的？
+若原厂有完整包（含注入 `FEATURE_WLAN_TDLS` 的私有头，或一份能编过的
+`wlan_hdd_cfg.c`/`wlan_hdd_main.c`），换用它即可恢复。
+在此之前，V12-debug 无法产出可刷镜像，sysrq 方案（不需重编译）是唯一可用路径。
+
+---
+
 ## 系统底层精简模块集（slim 系列）
 
 `modules/` 下 5 个独立、可逆、互不依赖的 KernelSU / Magisk 包，
