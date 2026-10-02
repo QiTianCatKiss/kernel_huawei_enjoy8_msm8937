@@ -1,0 +1,6 @@
+id=ldn20-slim-debug
+name=LDN-AL20 日志与上报精简
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=精简系统后台日志与检测上报：压低 logd 分类日志等级、关闭 atrace/systrace 常驻、降低内核 printk 冗余等级、清理 hwlogger 历史缓冲、禁止 HUAWEI 统计类属性上报。全部可逆（restore.sh 一键还原）。注意：本模块不含 /proc/reboot_watchdog —— 那是重启通知机制，关闭会导致关机不优雅。兼容 Magisk 与 KernelSU(ReSukiSU)。

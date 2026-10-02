@@ -1,6 +1,6 @@
 id=ldnal20-perf
-name=LDN-AL20 内核性能调优
-version=v3.1
-versionCode=4
+name=LDN-AL20 内核性能调优（已并入 slim-mem）
+version=v3.2
+versionCode=5
 author=QiTianCatKiss
-description=运行时性能调参：I/O 调度器 deadline、swappiness、脏页回写、readahead、interactive 调频。同时兼容 Magisk 与 KernelSU(ReSukiSU) 模块目录格式，放在 /data/adb/modules/ 即可被两者执行。需配合 V8+ 内核（开启 SELINUX_DEVELOP 后才允许临时关闭 SELinux 写入 /proc、/sys）。
+description=【已并入 ldn20-slim-mem，请改用那个】本模块的全部内容（swappiness/脏页回写/read_ahead/interactive 调频）已合并进 slim 系列模块的 ldn20-slim-mem，并额外加入了 min_free_kbytes、华为私有 direct_swappiness、华为 LMKD 阈值与 zram 参数调整。保留此模块仅为兼容旧安装，请勿与 slim-mem 同时使用（会重复写入同一批参数）。

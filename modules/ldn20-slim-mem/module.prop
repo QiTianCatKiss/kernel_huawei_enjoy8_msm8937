@@ -1,0 +1,6 @@
+id=ldn20-slim-mem
+name=LDN-AL20 内存与回收精简
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=精简内核内存回收路径：调高 min_free_kbytes 减少回收抖动、按 LMKD minfree 阶梯调低杀进程阈值、优化脏页与预读、zram 压缩参数调优、关闭 laptop_mode 省电误触。合并了原 perf_module 全部内容（swappiness/脏页/预读/interactive 调频）。含一键还原脚本。兼容 Magisk 与 KernelSU(ReSukiSU)。

@@ -28,7 +28,14 @@
 │   ├── ksu_pin.sh          把 ReSukiSU 钉到 v4.2.0-rc3
 │   └── ksu_exec_hook_fix.py 修复 execve 钩子接线（su 可用的关键）
 ├── wifi_module/            Magisk 模块（开机自动启动 WiFi，兼容旧内核）
-├── perf_module/            Magisk/KernelSU 通用性能调优模块
+├── perf_module/            性能调优模块（已并入 slim-mem，保留仅兼容）
+├── modules/                系统底层精简模块集（5 个包）
+│   ├── ldn20-slim-core/    引导包（携带公共库，必须先装）
+│   ├── ldn20-slim-mem/     内存与回收（含 direct_swappiness、华为 LMKD）
+│   ├── ldn20-slim-net/     网络栈（TIME_WAIT、FastOpen、keepalive）
+│   ├── ldn20-slim-boot/    开机与后台服务（init 服务停止 + 预装冻结）
+│   ├── ldn20-slim-debug/   日志与上报（logd 降噪、atrace）
+│   └── common/             公共库唯一源（打包时分发到各包）
 ├── stock/                  原厂内核镜像、LDN-AL20 设备树、原厂 config
 ├── ramdisk/                解开的原厂 ramdisk
 ├── LICENSE                 MIT（本项目新增部分）
@@ -275,6 +282,59 @@ adb shell sh /data/local/tmp/ksu_bootstrap.sh
 
 用户态（`perf_module/`，Magisk 与 KernelSU 通用）：
 swappiness、脏页回写、readahead、interactive 调频。
+
+> `perf_module` 已并入 `modules/ldn20-slim-mem`（后者内容是它的超集），
+> 详见 `modules/README.md`。两者不要同时安装。
+
+---
+
+## 系统底层精简模块集（slim 系列）
+
+`modules/` 下 5 个独立、可逆、互不依赖的 KernelSU / Magisk 包，
+针对系统底层做精简，**不删任何系统文件**：
+
+| 模块 | 作用 | 关键改动 |
+|---|---|---|
+| `ldn20-slim-core` | 引导（**必须先装**） | 部署公共库与状态检查脚本 |
+| `ldn20-slim-mem` | 内存与回收 | 华为私有 `vm/direct_swappiness` 20、min_free_kbytes、华为 LMKD minfree、zram |
+| `ldn20-slim-net` | 网络栈 | TIME_WAIT 复用、FastOpen、keepalive 120/15/4、conntrack 扩容 |
+| `ldn20-slim-boot` | 开机与后台 | 停 4 个调试类 init 服务、冻结 7 个预装后台应用 |
+| `ldn20-slim-debug` | 日志与上报 | 20 个 log.tag 降噪、关 atrace、清理旧日志 |
+
+打包与安装：
+
+```bash
+cd /mnt/e/111/ldn-al20 && sh tools/pack_modules.sh
+# 产物 out/modules/*.zip，按 core → mem → net → boot → debug 顺序安装
+```
+
+统一状态检查（每个调参模块都带 `restore.sh` 一键还原）：
+
+```bash
+su -c 'sh /data/adb/ldn20-slim/slim_status.sh'
+```
+
+完整设计说明、参数取值依据与风险提示见 **`modules/README.md`**。
+
+### 本机内核的两个关键私有接口
+
+**1. `vm/direct_swappiness`（`CONFIG_HUAWEI_DIRECT_SWAPPINESS`）**
+
+该配置把 `vm/swappiness` 范围从 0-100 放宽到 0-200，并**新增**独立节点
+`vm/direct_swappiness`。`mm/vmscan.c: get_scan_count()`：
+
+```c
+if (current_is_kswapd()) { ... } else { swappiness = direct_vm_swappiness; }
+```
+
+即 kswapd 后台回收用 `swappiness`，**前台同步回收用 `direct_swappiness`**。
+后者发生在用户态已等不及时，同步回收本身就是卡顿来源。
+
+**2. 华为定制 LMKD（`drivers/staging/android/lowmemorykiller.c`）**
+
+`CONFIG_ANDROID_LOW_MEMORY_KILLER=y`（built-in），参数在
+`/sys/module/lowmemorykiller/parameters/`。原厂 `minfree` 4 档 =
+6/8/16/64 MB，2GB 机上前两档过于激进（6MB 就开始杀进程）。
 
 ---
 

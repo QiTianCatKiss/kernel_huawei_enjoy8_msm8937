@@ -1,0 +1,6 @@
+id=ldn20-slim-core
+name=LDN-AL20 slim 系列引导（公共库）
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=【必须第一个安装】slim 系列四个模块的公共库与统一状态检查脚本。本模块不直接调参，只负责把 slim_common.sh / slim_status.sh 部署到 /data/adb/ldn20-slim/ 并建立备份目录。其余模块（slim-mem / slim-net / slim-boot / slim-debug）依赖它。请先装本模块，再装其它三个。兼容 Magisk 与 KernelSU(ReSukiSU)。

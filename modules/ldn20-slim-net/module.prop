@@ -1,0 +1,6 @@
+id=ldn20-slim-net
+name=LDN-AL20 网络栈精简
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=精简内核网络栈：释放 TIME_WAIT 累积（tcp_tw_reuse）、启用 TCP Fast Open、扩大端口范围与缓冲区、按内存自适应 tcp_mem、conntrack 表按内存缩放、缩短 TCP keepalive 空闲探测、IPv6 按需可关。内核默认拥塞控制已是 westwood（V8+）。含一键还原脚本。兼容 Magisk 与 KernelSU(ReSukiSU)。

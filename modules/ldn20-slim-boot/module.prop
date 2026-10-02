@@ -1,0 +1,6 @@
+id=ldn20-slim-boot
+name=LDN-AL20 开机与后台服务精简
+version=v1.0
+versionCode=1
+author=QiTianCatKiss
+description=精简开机耗时与后台常驻：关闭华为无用的调试服务、冻结可安全停用的预装后台应用、缩短开机动画相关等待、降低 dmesg/logd 输出量。全部操作可逆（冻结用 pm disable-user，服务用 stop，还原脚本可一键恢复）。不删任何系统文件。兼容 Magisk 与 KernelSU(ReSukiSU)。
